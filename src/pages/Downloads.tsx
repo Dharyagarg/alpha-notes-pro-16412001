@@ -2,60 +2,19 @@ import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { AnimatedSection } from "@/components/AnimatedSection";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
-import { Download, FileText, Trash2, FolderOpen, HardDrive } from "lucide-react";
+import { Download, FileText, Trash2, FolderOpen, HardDrive, Search, Music2, FileIcon } from "lucide-react";
 import { toast } from "sonner";
+import { getAllFiles, deleteFile, fmtSize, type DownloadedFile } from "@/lib/downloadManager";
 
-interface DownloadedFile {
-  id: string;
-  name: string;
-  size: number;
-  type: string;
-  url: string;
-  downloadedAt: string;
-}
-
-const DB_NAME = "alpha-notes-downloads";
-const STORE_NAME = "files";
-
-const openDB = (): Promise<IDBDatabase> =>
-  new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => { req.result.createObjectStore(STORE_NAME, { keyPath: "id" }); };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-
-const getAllFiles = async (): Promise<DownloadedFile[]> => {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const store = tx.objectStore(STORE_NAME);
-    const req = store.getAll();
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-};
-
-const deleteFile = async (id: string) => {
-  const db = await openDB();
-  return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    tx.objectStore(STORE_NAME).delete(id);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-};
-
-const fmtSize = (bytes: number) => {
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-};
+type FilterCategory = "all" | "note" | "music";
 
 const DownloadsPage = () => {
   const [files, setFiles] = useState<DownloadedFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<FilterCategory>("all");
 
   const load = async () => {
     try {
@@ -79,48 +38,105 @@ const DownloadsPage = () => {
     window.open(file.url, "_blank");
   };
 
+  const filtered = files.filter((f) => {
+    const matchFilter = filter === "all" || f.category === filter;
+    const matchSearch = !search || f.name.toLowerCase().includes(search.toLowerCase());
+    return matchFilter && matchSearch;
+  });
+
+  const musicCount = files.filter((f) => f.category === "music").length;
+  const noteCount = files.filter((f) => f.category === "note").length;
+
   return (
     <Layout>
       <section className="section-padding min-h-screen">
         <div className="max-w-4xl mx-auto">
-          <AnimatedSection className="text-center mb-12">
+          <AnimatedSection className="text-center mb-8">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 mb-4">
               <Download className="w-4 h-4 text-primary" />
               <span className="text-sm font-medium text-primary">Offline Access</span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-bold mb-3">Downloads</h1>
             <p className="text-muted-foreground max-w-lg mx-auto">
-              Access your downloaded notes offline anytime.
+              Access your downloaded notes and music offline anytime.
             </p>
+          </AnimatedSection>
+
+          {/* Search & Filter */}
+          <AnimatedSection delay={0.05} className="mb-6">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search downloads..."
+                  className="pl-10 bg-secondary/50 border-border/50"
+                />
+              </div>
+              <div className="flex gap-2">
+                {([
+                  { key: "all" as FilterCategory, label: "All", count: files.length },
+                  { key: "music" as FilterCategory, label: "Music", count: musicCount, icon: Music2 },
+                  { key: "note" as FilterCategory, label: "Notes", count: noteCount, icon: FileIcon },
+                ]).map((f) => (
+                  <Button
+                    key={f.key}
+                    variant={filter === f.key ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilter(f.key)}
+                    className={filter === f.key ? "gold-gradient text-primary-foreground" : ""}
+                  >
+                    {f.icon && <f.icon className="w-3.5 h-3.5 mr-1" />}
+                    {f.label} ({f.count})
+                  </Button>
+                ))}
+              </div>
+            </div>
           </AnimatedSection>
 
           {loading ? (
             <div className="text-center text-muted-foreground py-20">Loading...</div>
-          ) : files.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <AnimatedSection delay={0.1}>
               <div className="glass-card gold-border-glow p-12 text-center">
                 <HardDrive className="w-16 h-16 mx-auto text-muted-foreground/40 mb-4" />
-                <h2 className="text-xl font-semibold mb-2">No downloads yet</h2>
+                <h2 className="text-xl font-semibold mb-2">
+                  {files.length === 0 ? "No downloads yet" : "No matching downloads"}
+                </h2>
                 <p className="text-muted-foreground mb-6">
-                  Download notes from the Notes page to access them offline.
+                  {files.length === 0
+                    ? "Download notes or music to access them offline."
+                    : "Try a different search or filter."}
                 </p>
-                <Button asChild className="gold-gradient text-primary-foreground">
-                  <a href="/notes">Browse Notes</a>
-                </Button>
+                {files.length === 0 && (
+                  <div className="flex gap-3 justify-center">
+                    <Button asChild className="gold-gradient text-primary-foreground">
+                      <a href="/notes">Browse Notes</a>
+                    </Button>
+                    <Button asChild variant="outline">
+                      <a href="/music">Browse Music</a>
+                    </Button>
+                  </div>
+                )}
               </div>
             </AnimatedSection>
           ) : (
             <div className="space-y-3">
-              {files.map((file, i) => (
-                <AnimatedSection key={file.id} delay={i * 0.05}>
+              {filtered.map((file, i) => (
+                <AnimatedSection key={file.id} delay={i * 0.03}>
                   <motion.div whileHover={{ x: 4 }} className="glass-card p-4 flex items-center gap-4">
                     <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                      <FileText className="w-6 h-6 text-primary" />
+                      {file.category === "music" ? (
+                        <Music2 className="w-6 h-6 text-primary" />
+                      ) : (
+                        <FileText className="w-6 h-6 text-primary" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{file.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {fmtSize(file.size)} · {new Date(file.downloadedAt).toLocaleDateString()}
+                        {fmtSize(file.size)} · {file.category} · {new Date(file.downloadedAt).toLocaleDateString()}
                       </p>
                     </div>
                     <div className="flex gap-2">

@@ -2,48 +2,15 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Layout } from "@/components/Layout";
 import { AnimatedSection } from "@/components/AnimatedSection";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music2, ListMusic, Shuffle, Repeat,
+  Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music2, ListMusic, Shuffle, Repeat, Search, Download,
 } from "lucide-react";
-
-interface Track {
-  id: number;
-  title: string;
-  artist: string;
-  cover: string;
-  src: string;
-  duration: number;
-}
-
-const SAMPLE_TRACKS: Track[] = [
-  {
-    id: 1, title: "Lofi Study Beats", artist: "Alpha Vibes",
-    cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&h=300&fit=crop",
-    src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", duration: 372,
-  },
-  {
-    id: 2, title: "Focus Flow", artist: "Deep Concentration",
-    cover: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=300&h=300&fit=crop",
-    src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", duration: 398,
-  },
-  {
-    id: 3, title: "Calm Piano Sessions", artist: "Study Mode",
-    cover: "https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=300&h=300&fit=crop",
-    src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", duration: 305,
-  },
-  {
-    id: 4, title: "Nature Ambience", artist: "Zen Study",
-    cover: "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=300&h=300&fit=crop",
-    src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", duration: 284,
-  },
-  {
-    id: 5, title: "Midnight Jazz", artist: "Alpha Notes Radio",
-    cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop",
-    src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3", duration: 340,
-  },
-];
+import { TRACKS, GENRES, type Track } from "@/lib/musicData";
+import { saveFile } from "@/lib/downloadManager";
+import { toast } from "sonner";
 
 const fmt = (s: number) => {
   const m = Math.floor(s / 60);
@@ -61,20 +28,27 @@ const MusicPage = () => {
   const [muted, setMuted] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
-  const [showPlaylist, setShowPlaylist] = useState(true);
+  const [genre, setGenre] = useState<string>("All");
+  const [search, setSearch] = useState("");
 
-  const track = SAMPLE_TRACKS[currentIdx];
+  const filtered = TRACKS.filter((t) => {
+    const matchGenre = genre === "All" || t.genre === genre;
+    const matchSearch = !search || t.title.toLowerCase().includes(search.toLowerCase()) || t.artist.toLowerCase().includes(search.toLowerCase());
+    return matchGenre && matchSearch;
+  });
+
+  const track = TRACKS[currentIdx];
 
   const play = useCallback(() => { audioRef.current?.play(); setPlaying(true); }, []);
   const pause = useCallback(() => { audioRef.current?.pause(); setPlaying(false); }, []);
 
   const next = useCallback(() => {
     if (shuffle) {
-      let r = Math.floor(Math.random() * SAMPLE_TRACKS.length);
-      while (r === currentIdx && SAMPLE_TRACKS.length > 1) r = Math.floor(Math.random() * SAMPLE_TRACKS.length);
+      let r = Math.floor(Math.random() * TRACKS.length);
+      while (r === currentIdx && TRACKS.length > 1) r = Math.floor(Math.random() * TRACKS.length);
       setCurrentIdx(r);
     } else {
-      setCurrentIdx((i) => (i + 1) % SAMPLE_TRACKS.length);
+      setCurrentIdx((i) => (i + 1) % TRACKS.length);
     }
   }, [currentIdx, shuffle]);
 
@@ -82,7 +56,7 @@ const MusicPage = () => {
     if (audioRef.current && audioRef.current.currentTime > 3) {
       audioRef.current.currentTime = 0;
     } else {
-      setCurrentIdx((i) => (i - 1 + SAMPLE_TRACKS.length) % SAMPLE_TRACKS.length);
+      setCurrentIdx((i) => (i - 1 + TRACKS.length) % TRACKS.length);
     }
   }, []);
 
@@ -113,12 +87,32 @@ const MusicPage = () => {
     if (audioRef.current) audioRef.current.currentTime = val[0];
   };
 
+  const handleDownload = async (t: Track) => {
+    try {
+      toast.loading("Downloading...", { id: `dl-${t.id}` });
+      const res = await fetch(t.src);
+      const blob = await res.blob();
+      await saveFile({
+        id: `music-${t.id}`,
+        name: `${t.title} - ${t.artist}.mp3`,
+        size: blob.size,
+        type: "audio/mpeg",
+        url: URL.createObjectURL(blob),
+        downloadedAt: new Date().toISOString(),
+        category: "music",
+      });
+      toast.success("Downloaded! Find it in Downloads.", { id: `dl-${t.id}` });
+    } catch {
+      toast.error("Download failed", { id: `dl-${t.id}` });
+    }
+  };
+
   return (
     <Layout>
       <audio ref={audioRef} preload="metadata" />
       <section className="section-padding min-h-screen">
-        <div className="max-w-5xl mx-auto">
-          <AnimatedSection className="text-center mb-12">
+        <div className="max-w-6xl mx-auto">
+          <AnimatedSection className="text-center mb-8">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 mb-4">
               <Music2 className="w-4 h-4 text-primary" />
               <span className="text-sm font-medium text-primary">Study Music</span>
@@ -129,113 +123,132 @@ const MusicPage = () => {
             </p>
           </AnimatedSection>
 
-          <div className="grid lg:grid-cols-5 gap-6">
-            {/* Player */}
-            <AnimatedSection delay={0.1} className="lg:col-span-3">
-              <div className="glass-card gold-border-glow p-6 sm:p-8">
+          {/* Player */}
+          <AnimatedSection delay={0.1} className="mb-8">
+            <div className="glass-card gold-border-glow p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row items-center gap-6">
                 {/* Album Art */}
-                <div className="flex justify-center mb-8">
-                  <motion.div
-                    animate={{ rotate: playing ? 360 : 0 }}
-                    transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                    className="w-48 h-48 sm:w-56 sm:h-56 rounded-full overflow-hidden border-4 border-primary/30 shadow-2xl shadow-primary/20"
-                  >
-                    <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
-                  </motion.div>
-                </div>
+                <motion.div
+                  animate={{ rotate: playing ? 360 : 0 }}
+                  transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                  className="w-32 h-32 sm:w-40 sm:h-40 rounded-full overflow-hidden border-4 border-primary/30 shadow-2xl shadow-primary/20 shrink-0"
+                >
+                  <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
+                </motion.div>
 
-                {/* Track Info */}
-                <div className="text-center mb-6">
-                  <h2 className="text-xl font-bold mb-1">{track.title}</h2>
-                  <p className="text-sm text-muted-foreground">{track.artist}</p>
-                </div>
+                <div className="flex-1 w-full">
+                  {/* Track Info */}
+                  <div className="text-center sm:text-left mb-4">
+                    <h2 className="text-xl font-bold mb-1">{track.title}</h2>
+                    <p className="text-sm text-muted-foreground">{track.artist} · {track.genre}</p>
+                  </div>
 
-                {/* Progress */}
-                <div className="mb-6">
-                  <Slider
-                    value={[progress]}
-                    max={duration || 1}
-                    step={1}
-                    onValueChange={seek}
-                    className="mb-2"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>{fmt(progress)}</span>
-                    <span>{fmt(duration)}</span>
+                  {/* Progress */}
+                  <div className="mb-4">
+                    <Slider value={[progress]} max={duration || 1} step={1} onValueChange={seek} className="mb-2" />
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{fmt(progress)}</span>
+                      <span>{fmt(duration)}</span>
+                    </div>
+                  </div>
+
+                  {/* Controls */}
+                  <div className="flex items-center justify-center gap-3 mb-4">
+                    <Button variant="ghost" size="icon" onClick={() => setShuffle(!shuffle)} className={shuffle ? "text-primary" : "text-muted-foreground"}>
+                      <Shuffle className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={prev}><SkipBack className="w-5 h-5" /></Button>
+                    <Button onClick={playing ? pause : play} className="w-14 h-14 rounded-full gold-gradient text-primary-foreground shadow-lg hover:shadow-primary/30">
+                      {playing ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={next}><SkipForward className="w-5 h-5" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => setRepeat(!repeat)} className={repeat ? "text-primary" : "text-muted-foreground"}>
+                      <Repeat className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDownload(track)} className="text-muted-foreground hover:text-primary">
+                      <Download className="w-4 h-4" />
+                    </Button>
+                  </div>
+
+                  {/* Volume */}
+                  <div className="flex items-center gap-3 max-w-xs mx-auto sm:mx-0">
+                    <Button variant="ghost" size="icon" onClick={() => setMuted(!muted)} className="shrink-0">
+                      {muted || volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                    </Button>
+                    <Slider value={[muted ? 0 : volume]} max={100} step={1} onValueChange={(v) => { setVolume(v[0]); setMuted(false); }} />
                   </div>
                 </div>
+              </div>
+            </div>
+          </AnimatedSection>
 
-                {/* Controls */}
-                <div className="flex items-center justify-center gap-3 mb-6">
-                  <Button variant="ghost" size="icon" onClick={() => setShuffle(!shuffle)}
-                    className={shuffle ? "text-primary" : "text-muted-foreground"}>
-                    <Shuffle className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={prev}>
-                    <SkipBack className="w-5 h-5" />
-                  </Button>
+          {/* Search & Genre Filters */}
+          <AnimatedSection delay={0.15} className="mb-6">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search songs or artists..."
+                  className="pl-10 bg-secondary/50 border-border/50"
+                />
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {GENRES.map((g) => (
                   <Button
-                    onClick={playing ? pause : play}
-                    className="w-14 h-14 rounded-full gold-gradient text-primary-foreground shadow-lg hover:shadow-primary/30"
+                    key={g}
+                    variant={genre === g ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setGenre(g)}
+                    className={genre === g ? "gold-gradient text-primary-foreground" : ""}
                   >
-                    {playing ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
+                    {g}
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={next}>
-                    <SkipForward className="w-5 h-5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => setRepeat(!repeat)}
-                    className={repeat ? "text-primary" : "text-muted-foreground"}>
-                    <Repeat className="w-4 h-4" />
-                  </Button>
-                </div>
-
-                {/* Volume */}
-                <div className="flex items-center gap-3 max-w-xs mx-auto">
-                  <Button variant="ghost" size="icon" onClick={() => setMuted(!muted)} className="shrink-0">
-                    {muted || volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                  </Button>
-                  <Slider value={[muted ? 0 : volume]} max={100} step={1} onValueChange={(v) => { setVolume(v[0]); setMuted(false); }} />
-                </div>
+                ))}
               </div>
-            </AnimatedSection>
+            </div>
+          </AnimatedSection>
 
-            {/* Playlist */}
-            <AnimatedSection delay={0.2} className="lg:col-span-2">
-              <div className="glass-card p-4">
-                <div className="flex items-center justify-between mb-4 px-2">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <ListMusic className="w-4 h-4 text-primary" /> Playlist
-                  </h3>
-                  <span className="text-xs text-muted-foreground">{SAMPLE_TRACKS.length} tracks</span>
-                </div>
-                <div className="space-y-1">
-                  {SAMPLE_TRACKS.map((t, i) => (
-                    <motion.button
-                      key={t.id}
-                      whileHover={{ x: 4 }}
-                      onClick={() => { setCurrentIdx(i); setPlaying(true); }}
-                      className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors ${
-                        i === currentIdx ? "bg-primary/15 border border-primary/30" : "hover:bg-secondary"
-                      }`}
-                    >
-                      <img src={t.cover} alt={t.title} className="w-10 h-10 rounded-lg object-cover" />
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium truncate ${i === currentIdx ? "text-primary" : ""}`}>
-                          {t.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{t.artist}</p>
-                      </div>
-                      <span className="text-xs text-muted-foreground">{fmt(t.duration)}</span>
-                      {i === currentIdx && playing && (
-                        <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ repeat: Infinity, duration: 1 }}
-                          className="w-2 h-2 rounded-full bg-primary" />
-                      )}
-                    </motion.button>
-                  ))}
-                </div>
+          {/* Playlist Grid */}
+          <AnimatedSection delay={0.2}>
+            <div className="glass-card p-4">
+              <div className="flex items-center justify-between mb-4 px-2">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <ListMusic className="w-4 h-4 text-primary" /> Playlist
+                </h3>
+                <span className="text-xs text-muted-foreground">{filtered.length} tracks</span>
               </div>
-            </AnimatedSection>
-          </div>
+              {filtered.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No tracks found.</p>
+              ) : (
+                <div className="space-y-1 max-h-[50vh] overflow-y-auto pr-1">
+                  {filtered.map((t) => {
+                    const globalIdx = TRACKS.findIndex((tr) => tr.id === t.id);
+                    const isActive = globalIdx === currentIdx;
+                    return (
+                      <motion.div key={t.id} whileHover={{ x: 4 }} className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${isActive ? "bg-primary/15 border border-primary/30" : "hover:bg-secondary"}`}>
+                        <button onClick={() => { setCurrentIdx(globalIdx); setPlaying(true); }} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                          <img src={t.cover} alt={t.title} className="w-10 h-10 rounded-lg object-cover" />
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium truncate ${isActive ? "text-primary" : ""}`}>{t.title}</p>
+                            <p className="text-xs text-muted-foreground">{t.artist} · {t.genre}</p>
+                          </div>
+                          <span className="text-xs text-muted-foreground">{fmt(t.duration)}</span>
+                          {isActive && playing && (
+                            <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-2 h-2 rounded-full bg-primary" />
+                          )}
+                        </button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDownload(t)} className="shrink-0 text-muted-foreground hover:text-primary">
+                          <Download className="w-4 h-4" />
+                        </Button>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </AnimatedSection>
         </div>
       </section>
     </Layout>
