@@ -2,12 +2,14 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "./ThemeProvider";
-import { BookOpen, Menu, X, Sun, Moon, Crown, User } from "lucide-react";
+import { BookOpen, Menu, X, Sun, Moon, Crown, User, Music2, Download } from "lucide-react";
 
 const navLinks = [
   { to: "/", label: "Home" },
   { to: "/notes", label: "Notes" },
   { to: "/subjects", label: "Subjects" },
+  { to: "/music", label: "Music", icon: Music2 },
+  { to: "/downloads", label: "Downloads", icon: Download },
   { to: "/premium", label: "Premium", icon: Crown },
   { to: "/about", label: "About" },
   { to: "/contact", label: "Contact" },

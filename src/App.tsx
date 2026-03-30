@@ -13,7 +13,10 @@ import ContactPage from "./pages/Contact";
 import LinksPage from "./pages/Links";
 import DashboardPage from "./pages/Dashboard";
 import AdminPage from "./pages/Admin";
+import MusicPage from "./pages/Music";
+import DownloadsPage from "./pages/Downloads";
 import NotFound from "./pages/NotFound";
+import { AIChatButton } from "./components/AIChatButton";
 
 const queryClient = new QueryClient();
 
@@ -34,8 +37,11 @@ const App = () => (
               <Route path="/links" element={<LinksPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/admin" element={<AdminPage />} />
+              <Route path="/music" element={<MusicPage />} />
+              <Route path="/downloads" element={<DownloadsPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            <AIChatButton />
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
