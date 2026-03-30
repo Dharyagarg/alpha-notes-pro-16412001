@@ -83,7 +83,7 @@ export const Footer = () => (
           © {new Date().getFullYear()} Alpha Notes. All rights reserved.
         </p>
         <p className="text-xs text-muted-foreground flex items-center gap-1">
-          Made with <Heart className="w-3 h-3 text-primary fill-primary" /> for students
+          Made with <Heart className="w-3 h-3 text-primary fill-primary" /> by Alpha Notes Team
         </p>
       </div>
     </div>
